@@ -50,7 +50,6 @@ const IV_BYTES = 12;
    no produzcan el mismo cifrado. */
 const SAL_BYTES = 16;
 
-
 /* ============================================================
    CONVERSORES binario <-> base64
    ============================================================
@@ -75,7 +74,6 @@ function base64Abuf(b64) {
   return u8.buffer;
 }
 
-
 /* ============================================================
    1) DERIVAR LA CLAVE A PARTIR DE LA CONTRASEÑA MAESTRA
    ============================================================
@@ -96,7 +94,7 @@ async function derivarClave(contrasenaMaestra, sal, iteraciones) {
     "raw",
     codificador.encode(contrasenaMaestra),
     "PBKDF2",
-    false,            // extractable = false  ← REGLA 2
+    false, // extractable = false  ← REGLA 2
     ["deriveKey"]
   );
 
@@ -106,11 +104,10 @@ async function derivarClave(contrasenaMaestra, sal, iteraciones) {
     { name: "PBKDF2", salt: sal, iterations: iteraciones, hash: KDF.hash },
     claveBase,
     { name: "AES-GCM", length: 256 },
-    false,            // sigue sin ser exportable
+    false, // sigue sin ser exportable
     ["encrypt", "decrypt"]
   );
 }
-
 
 /* ============================================================
    2) CIFRAR UN OBJETO COMPLETO
@@ -123,14 +120,13 @@ async function cifrarObjeto(clave, objeto) {
   const texto = new TextEncoder().encode(JSON.stringify(objeto));
 
   const cifrado = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv },   // IV nuevo, siempre
+    { name: "AES-GCM", iv: iv }, // IV nuevo, siempre
     clave,
     texto
   );
 
   return { iv: bufAbase64(iv), data: bufAbase64(cifrado) };
 }
-
 
 /* ============================================================
    3) DESCIFRAR
@@ -157,12 +153,11 @@ async function descifrarObjeto(clave, ivB64, dataB64) {
        - Cualquier otra: JSON inválido, es decir, la contraseña
          era correcta pero los datos no tienen buena pinta. */
     if (e && e.name === "OperationError") {
-      throw new Error("CONTRASENA_INCORRECTA");
+      throw new Error("CONTRASENA_INCORRECTA", { cause: e });
     }
-    throw new Error("DATOS_CORRUPTOS");
+    throw new Error("DATOS_CORRUPTOS", { cause: e });
   }
 }
-
 
 /* ============================================================
    4) FORMATO DEL ARCHIVO DE LA BÓVEDA
@@ -197,7 +192,6 @@ function armarBoveda(sal, iteraciones, iv, data) {
   };
 }
 
-
 /* ============================================================
    5) NUEVA BÓVEDA
    ============================================================
@@ -205,7 +199,7 @@ function armarBoveda(sal, iteraciones, iv, data) {
    junto con la clave viva (que el llamador debe descartar con
    `bloquear()` cuando se vaya).
    ============================================================ */
-async function crearBoveda(contrasenaMaestra) {
+export async function crearBoveda(contrasenaMaestra) {
   if (typeof contrasenaMaestra !== "string" || contrasenaMaestra.length === 0) {
     throw new Error("FALTA_CONTRASENA");
   }
@@ -217,11 +211,10 @@ async function crearBoveda(contrasenaMaestra) {
   return { boveda: armarBoveda(sal, KDF.iteraciones, iv, data), clave: clave };
 }
 
-
 /* ============================================================
    6) ABRIR UNA BÓVEDA EXISTENTE
    ============================================================ */
-async function abrirBoveda(contrasenaMaestra, bovedaGuardada) {
+export async function abrirBoveda(contrasenaMaestra, bovedaGuardada) {
   if (!bovedaGuardada || typeof bovedaGuardada !== "object") {
     throw new Error("NO_HAY_BOVEDA");
   }
@@ -232,7 +225,11 @@ async function abrirBoveda(contrasenaMaestra, bovedaGuardada) {
 
   /* Si la contraseña está mal esto lanza CONTRASENA_INCORRECTA.
      La clave derivada en ese caso queda en el olvido: no se usa. */
-  const contenido = await descifrarObjeto(clave, bovedaGuardada.iv, bovedaGuardada.data);
+  const contenido = await descifrarObjeto(
+    clave,
+    bovedaGuardada.iv,
+    bovedaGuardada.data
+  );
 
   if (!contenido || !Array.isArray(contenido.entradas)) {
     throw new Error("DATOS_CORRUPTOS");
@@ -241,7 +238,6 @@ async function abrirBoveda(contrasenaMaestra, bovedaGuardada) {
   return { clave: clave, entradas: contenido.entradas };
 }
 
-
 /* ============================================================
    7) RE-CIFRAR (para guardar cambios)
    ============================================================
@@ -249,7 +245,7 @@ async function abrirBoveda(contrasenaMaestra, bovedaGuardada) {
    cifrar TODO el contenido con un IV nuevo. Si usáramos el IV
    viejo romperíamos AES-GCM. ← REGLA 3
    ============================================================ */
-async function guardarBoveda(clave, bovedaPrevia, entradas) {
+export async function guardarBoveda(clave, bovedaPrevia, entradas) {
   const { iv, data } = await cifrarObjeto(clave, { entradas: entradas });
   const nueva = Object.assign({}, bovedaPrevia, { iv: iv, data: data });
   return nueva;

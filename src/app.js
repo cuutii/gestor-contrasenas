@@ -15,7 +15,7 @@
    │                                                         │
    │  Verificación:                                          │
    │                                                         │
-   │    grep -nE "\.(inner|outer)HTML" app.js                │
+   │    grep -nE "\.(inner|outer)HTML" src/app.js            │
    │                                                         │
    │  Debe devolver 0 resultados. El comando está escrito    │
    │  de forma que no se encuentre a sí mismo ni a esta      │
@@ -29,8 +29,10 @@
    Tu bóveda nunca sale de tu computadora.
    ============================================================ */
 
-"use strict";
-
+/* Todas las funciones criptográficas vienen de src/crypto.js vía
+   import explícito. Este archivo NO depende de ninguna global
+   implícita: lo que usa de crypto.js está declarado acá abajo. */
+import { abrirBoveda, crearBoveda, guardarBoveda } from "./crypto.js";
 
 /* ============================================================
    0) ESTADO EN MEMORIA
@@ -40,17 +42,17 @@
    más sensible de todo el programa.
    ============================================================ */
 const estado = {
-  clave: null,          // CryptoKey | null  (null = bloqueada)
-  entradas: [],         // copia en claro, SOLO en memoria
-  boveda: null,         // el JSON cifrado que va a localStorage
-  editandoId: null,     // id de la entrada que se está editando
-  temporizador: null,   // temporizador de bloqueo automático
+  clave: null, // CryptoKey | null  (null = bloqueada)
+  entradas: [], // copia en claro, SOLO en memoria
+  boveda: null, // el JSON cifrado que va a localStorage
+  editandoId: null, // id de la entrada que se está editando
+  temporizador: null, // temporizador de bloqueo automático
   ultimaActividad: Date.now()
 };
 
-const CLAVE_STORAGE = "gestor.cesta";     // la bóveda cifrada
-const CLAVE_AJUSTES = "gestor.ajustes";   // ajustes (no sensibles)
-const SEGUNDOS_PARA_BLOQUEAR = 300;       // 5 minutos sin tocar nada
+const CLAVE_STORAGE = "gestor.cesta"; // la bóveda cifrada
+const CLAVE_AJUSTES = "gestor.ajustes"; // ajustes (no sensibles)
+const SEGUNDOS_PARA_BLOQUEAR = 300; // 5 minutos sin tocar nada
 const SEGUNDOS_PARA_BORRAR_CLIPBOARD = 30;
 
 /* ============================================================
@@ -96,13 +98,14 @@ function el(tag, props, hijos) {
   return nodo;
 }
 
-function $(id) { return document.getElementById(id); }
+function $(id) {
+  return document.getElementById(id);
+}
 
 /* Vaciar un contenedor sin dejar restos en el DOM */
 function vaciar(nodo) {
   while (nodo.firstChild) nodo.removeChild(nodo.firstChild);
 }
-
 
 /* ============================================================
    2) STORAGE  (solo va cifrado, o ajustes insensibles)
@@ -117,7 +120,7 @@ function leerBoveda() {
     if (!obj || typeof obj !== "object") return null;
     if (!obj.iv || !obj.data || !obj.sal) return null;
     return obj;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -130,7 +133,9 @@ function leerAjustes() {
   try {
     const crudo = localStorage.getItem(CLAVE_AJUSTES);
     if (crudo) return JSON.parse(crudo);
-  } catch (e) { /* no importa */ }
+  } catch {
+    /* no importa */
+  }
   return { verContrasenas: false, ordenarPor: "titulo" };
 }
 
@@ -139,7 +144,6 @@ function escribirAjustes(ajustes) {
 }
 
 let ajustes = leerAjustes();
-
 
 /* ============================================================
    3) GENERADOR DE CONTRASEÑAS
@@ -162,7 +166,7 @@ const JUEGOS = {
   simbolos: "!@#$%^&*()-_=+[]{};:,.<>?/"
 };
 
-const MAX_U32 = 4294967296;   // 2^32
+const MAX_U32 = 4294967296; // 2^32
 
 function enteroSinSesgo(maximo) {
   /* Devuelve un entero aleatorio uniforme en [0, maximo). */
@@ -177,12 +181,14 @@ function enteroSinSesgo(maximo) {
 }
 
 function generarContrasena(largo, opciones) {
-  let abecedario = JUEGOS.minusculas;   // siempre incluida
+  let abecedario = JUEGOS.minusculas; // siempre incluida
   const obligatorias = [];
 
   if (opciones.mayusculas) {
     abecedario += JUEGOS.mayusculas;
-    obligatorias.push(JUEGOS.mayusculas[enteroSinSesgo(JUEGOS.mayusculas.length)]);
+    obligatorias.push(
+      JUEGOS.mayusculas[enteroSinSesgo(JUEGOS.mayusculas.length)]
+    );
   }
   if (opciones.numeros) {
     abecedario += JUEGOS.numeros;
@@ -238,7 +244,7 @@ function medirFortaleza(clave) {
   if (tieneNum) abecedario += 10;
   if (tieneSimb) abecedario += 33;
 
-  if (abecedario > 0) entropia = largo * (Math.log2(abecedario));
+  if (abecedario > 0) entropia = largo * Math.log2(abecedario);
 
   /* Penalizaciones: contraseñas muy cortas o repetitivas son
      mucho más fáciles de adivinar de lo que sugiere su largo. */
@@ -246,13 +252,14 @@ function medirFortaleza(clave) {
   if (/^(.)\1+$/.test(clave)) entropia *= 0.3;
   if (/^(123|abc|qwe|password|contrasena)/i.test(clave)) entropia *= 0.4;
 
-  if (entropia >= 100) return { puntos: 4, texto: "Muy fuerte", clase: "fuerte" };
+  if (entropia >= 100)
+    return { puntos: 4, texto: "Muy fuerte", clase: "fuerte" };
   if (entropia >= 75) return { puntos: 3, texto: "Fuerte", clase: "buena" };
-  if (entropia >= 50) return { puntos: 2, texto: "Aceptable", clase: "regular" };
+  if (entropia >= 50)
+    return { puntos: 2, texto: "Aceptable", clase: "regular" };
   if (entropia >= 28) return { puntos: 1, texto: "Débil", clase: "debil" };
   return { puntos: 0, texto: "Muy débil", clase: "mala" };
 }
-
 
 /* ============================================================
    4) PORTAPAPELES
@@ -268,7 +275,7 @@ let temporizadorClip = null;
 async function copiarAlPortapapeles(texto, boton) {
   try {
     await navigator.clipboard.writeText(texto);
-  } catch (e) {
+  } catch {
     avisar("No se pudo copiar. Probá con Ctrl+C.", "error");
     return;
   }
@@ -276,8 +283,12 @@ async function copiarAlPortapapeles(texto, boton) {
   const textoOriginal = boton ? boton.textContent : null;
   if (boton) boton.textContent = "Copiado ✓";
 
-  avisar("Copiado. Se borra del portapapeles en " +
-         SEGUNDOS_PARA_BORRAR_CLIPBOARD + " segundos.", "ok");
+  avisar(
+    "Copiado. Se borra del portapapeles en " +
+      SEGUNDOS_PARA_BORRAR_CLIPBOARD +
+      " segundos.",
+    "ok"
+  );
 
   if (temporizadorClip) clearTimeout(temporizadorClip);
   temporizadorClip = setTimeout(async () => {
@@ -286,11 +297,12 @@ async function copiarAlPortapapeles(texto, boton) {
          usuario copió otra cosa en el medio, no lo pisamos. */
       const actual = await navigator.clipboard.readText();
       if (actual === texto) await navigator.clipboard.writeText("");
-    } catch (e) { /* sin permiso: no insiste */ }
+    } catch {
+      /* sin permiso: no insiste */
+    }
     if (boton && textoOriginal !== null) boton.textContent = textoOriginal;
   }, SEGUNDOS_PARA_BORRAR_CLIPBOARD * 1000);
 }
-
 
 /* ============================================================
    5) AVISOS
@@ -306,9 +318,10 @@ function avisar(mensaje, tipo) {
   caja.hidden = false;
 
   if (temporizadorAviso) clearTimeout(temporizadorAviso);
-  temporizadorAviso = setTimeout(() => { caja.hidden = true; }, 5000);
+  temporizadorAviso = setTimeout(() => {
+    caja.hidden = true;
+  }, 5000);
 }
-
 
 /* ============================================================
    6) PANTALLAS
@@ -320,14 +333,13 @@ function avisar(mensaje, tipo) {
 function mostrarPantalla(cual) {
   ["crear", "abrir", "lista"].forEach(nombre => {
     const nodo = $("pantalla-" + nombre);
-    if (nodo) nodo.hidden = (nombre !== cual);
+    if (nodo) nodo.hidden = nombre !== cual;
   });
 
   const barra = $("barra-superior");
   /* El botón de bloquear solo tiene sentido con la bóveda abierta */
-  if (barra) barra.hidden = (cual !== "lista");
+  if (barra) barra.hidden = cual !== "lista";
 }
-
 
 /* ============================================================
    7) CREAR LA BÓVEDA
@@ -340,7 +352,10 @@ async function manejarCrear(ev) {
   const error = $("crear-error");
   const boton = $("crear-enviar");
 
-  const fallo = msg => { vaciar(error); error.appendChild(document.createTextNode(msg)); };
+  const fallo = msg => {
+    vaciar(error);
+    error.appendChild(document.createTextNode(msg));
+  };
 
   if (una.length < 8) {
     fallo("La contraseña maestra necesita al menos 8 caracteres.");
@@ -379,8 +394,10 @@ async function manejarCrear(ev) {
 
     arrancarTemporizador();
     entrarAlListado();
-    avisar("Bóveda creada. Guardá bien tu contraseña maestra: no hay recuperación.", "ok");
-
+    avisar(
+      "Bóveda creada. Guardá bien tu contraseña maestra: no hay recuperación.",
+      "ok"
+    );
   } catch (e) {
     fallo("No se pudo crear la bóveda: " + (e.message || e));
   } finally {
@@ -388,7 +405,6 @@ async function manejarCrear(ev) {
     boton.textContent = "Crear bóveda";
   }
 }
-
 
 /* ============================================================
    8) ABRIR LA BÓVEDA
@@ -400,10 +416,16 @@ async function manejarAbrir(ev) {
   const boton = $("abrir-enviar");
   const password = $("abrir-clave").value;
 
-  const fallo = msg => { vaciar(error); error.appendChild(document.createTextNode(msg)); };
+  const fallo = msg => {
+    vaciar(error);
+    error.appendChild(document.createTextNode(msg));
+  };
 
   const boveda = leerBoveda();
-  if (!boveda) { fallo("No hay ninguna bóveda en este navegador."); return; }
+  if (!boveda) {
+    fallo("No hay ninguna bóveda en este navegador.");
+    return;
+  }
 
   boton.disabled = true;
   boton.textContent = "Abriendo…";
@@ -415,13 +437,12 @@ async function manejarAbrir(ev) {
     estado.entradas = entradas;
     estado.boveda = boveda;
 
-    $("abrir-clave").value = "";   // no dejar rastro en el DOM
+    $("abrir-clave").value = ""; // no dejar rastro en el DOM
     vaciar(error);
 
     arrancarTemporizador();
     entrarAlListado();
     avisar("Bóveda abierta.", "ok");
-
   } catch (e) {
     if (e.message === "CONTRASENA_INCORRECTA") {
       fallo("Contraseña maestra incorrecta.");
@@ -435,7 +456,6 @@ async function manejarAbrir(ev) {
     boton.textContent = "Abrir bóveda";
   }
 }
-
 
 /* ============================================================
    9) BLOQUEAR
@@ -456,9 +476,11 @@ function bloquear(motivo) {
   estado.boveda = leerBoveda();
 
   /* Barremos los inputs: nada de texto sensible en el DOM */
-  document.querySelectorAll("input[type=text], input[type=password], textarea")
+  document
+    .querySelectorAll("input[type=text], input[type=password], textarea")
     .forEach(campo => {
-      if (campo.id !== "crear-clave" && campo.id !== "crear-repetir") campo.value = "";
+      if (campo.id !== "crear-clave" && campo.id !== "crear-repetir")
+        campo.value = "";
     });
 
   const contenedor = $("lista-entradas");
@@ -471,7 +493,6 @@ function bloquear(motivo) {
   if (motivo) avisar(motivo, "info");
 }
 
-
 /* ============================================================
    10) BLOQUEO AUTOMÁTICO POR INACTIVIDAD
    ============================================================ */
@@ -483,8 +504,11 @@ function arrancarTemporizador() {
     if (!estado.clave) return;
     const transcurrido = Date.now() - estado.ultimaActividad;
     if (transcurrido > SEGUNDOS_PARA_BLOQUEAR * 1000) {
-      bloquear("Bóveda bloqueada tras " +
-               (SEGUNDOS_PARA_BLOQUEAR / 60) + " minutos sin actividad.");
+      bloquear(
+        "Bóveda bloqueada tras " +
+          SEGUNDOS_PARA_BLOQUEAR / 60 +
+          " minutos sin actividad."
+      );
     } else {
       actualizarRelojBloqueo(transcurrido);
     }
@@ -499,24 +523,30 @@ function marcarActividad() {
 function actualizarRelojBloqueo(transcurrido) {
   const nodo = $("tiempo-bloqueo");
   if (!nodo) return;
-  const restante = Math.max(0, Math.ceil((SEGUNDOS_PARA_BLOQUEAR * 1000 - transcurrido) / 1000));
+  const restante = Math.max(
+    0,
+    Math.ceil((SEGUNDOS_PARA_BLOQUEAR * 1000 - transcurrido) / 1000)
+  );
   const min = Math.floor(restante / 60);
   const seg = String(restante % 60).padStart(2, "0");
   vaciar(nodo);
   nodo.appendChild(document.createTextNode("Se bloquea en " + min + ":" + seg));
 }
 
-
 /* ============================================================
    11) PERSISTIR CAMBIOS
    ============================================================
    Siempre que cambie algo hay que re-cifrar TODO con un IV
-   nuevo (ver crypto.js, REGLA 3). Si falla, no se persiste.
+   nuevo (ver src/crypto.js, REGLA 3). Si falla, no se persiste.
    ============================================================ */
 async function persistir() {
   if (!estado.clave) return false;
   try {
-    const nueva = await guardarBoveda(estado.clave, estado.boveda, estado.entradas);
+    const nueva = await guardarBoveda(
+      estado.clave,
+      estado.boveda,
+      estado.entradas
+    );
     escribirBoveda(nueva);
     estado.boveda = nueva;
     return true;
@@ -525,7 +555,6 @@ async function persistir() {
     return false;
   }
 }
-
 
 /* ============================================================
    12) LISTADO, BÚSQUEDA Y ORDEN
@@ -545,14 +574,17 @@ function entradasFiltradas() {
     if (!texto) return true;
     /* Busca en título, usuario y URL. NO en la contraseña:
        no tiene sentido exponerla ante un filtrado casual. */
-    return (e.titulo || "").toLowerCase().includes(texto) ||
-           (e.usuario || "").toLowerCase().includes(texto) ||
-           (e.url || "").toLowerCase().includes(texto);
+    return (
+      (e.titulo || "").toLowerCase().includes(texto) ||
+      (e.usuario || "").toLowerCase().includes(texto) ||
+      (e.url || "").toLowerCase().includes(texto)
+    );
   });
 
   const orden = ajustes.ordenarPor || "titulo";
   resultado = resultado.slice().sort((a, b) => {
-    if (orden === "reciente") return (b.modificado || "").localeCompare(a.modificado || "");
+    if (orden === "reciente")
+      return (b.modificado || "").localeCompare(a.modificado || "");
     return (a.titulo || "").localeCompare(b.titulo || "", "es");
   });
 
@@ -570,26 +602,43 @@ function pintarLista() {
   const contador = $("contador");
   if (contador) {
     vaciar(contador);
-    contador.appendChild(document.createTextNode(
-      total === 0
-        ? "Todavía no guardaste ninguna contraseña."
-        : visibles.length + " de " + total + " contraseña" + (total === 1 ? "" : "s")
-    ));
+    contador.appendChild(
+      document.createTextNode(
+        total === 0
+          ? "Todavía no guardaste ninguna contraseña."
+          : visibles.length +
+              " de " +
+              total +
+              " contraseña" +
+              (total === 1 ? "" : "s")
+      )
+    );
   }
 
   if (total === 0) {
-    contenedor.appendChild(el("div", { class: "vacio" }, [
-      el("p", {}, "Tu bóveda está vacía."),
-      el("p", { class: "vacio__sugerencia" },
-         "Empezá con el botón “Agregar contraseña”.")
-    ]));
+    contenedor.appendChild(
+      el("div", { class: "vacio" }, [
+        el("p", {}, "Tu bóveda está vacía."),
+        el(
+          "p",
+          { class: "vacio__sugerencia" },
+          "Empezá con el botón “Agregar contraseña”."
+        )
+      ])
+    );
     return;
   }
 
   if (visibles.length === 0) {
-    contenedor.appendChild(el("div", { class: "vacio" }, [
-      el("p", {}, "Ninguna contraseña coincide con “" + $("buscar").value + "”.")
-    ]));
+    contenedor.appendChild(
+      el("div", { class: "vacio" }, [
+        el(
+          "p",
+          {},
+          "Ninguna contraseña coincide con “" + $("buscar").value + "”."
+        )
+      ])
+    );
     return;
   }
 
@@ -599,41 +648,61 @@ function pintarLista() {
 function tarjetaDe(entrada) {
   const ver = !!ajustes.verContrasenas;
 
-  const campoClave = el("code", { class: "campo__valor" },
-    ver ? (entrada.clave || "") : "••••••••");
+  const campoClave = el(
+    "code",
+    { class: "campo__valor" },
+    ver ? entrada.clave || "" : "••••••••"
+  );
 
-  const botonVer = el("button", {
-    type: "button",
-    class: "boton boton--icono",
-    title: ver ? "Ocultar contraseña" : "Mostrar contraseña",
-    onclick: () => {
-      /* Se cambia solo el estado visual; no se vuelve a pintar
+  const botonVer = el(
+    "button",
+    {
+      type: "button",
+      class: "boton boton--icono",
+      title: ver ? "Ocultar contraseña" : "Mostrar contraseña",
+      onclick: () => {
+        /* Se cambia solo el estado visual; no se vuelve a pintar
          toda la lista para no perder el foco de la búsqueda. */
-      ajustes.verContrasenas = !ajustes.verContrasenas;
-      escribirAjustes(ajustes);
-      pintarLista();
-    }
-  }, ver ? "🙈" : "👁");
+        ajustes.verContrasenas = !ajustes.verContrasenas;
+        escribirAjustes(ajustes);
+        pintarLista();
+      }
+    },
+    ver ? "🙈" : "👁"
+  );
 
-  const botonCopiar = el("button", {
-    type: "button",
-    class: "boton boton--icono",
-    title: "Copiar contraseña",
-    onclick: ev => copiarAlPortapapeles(entrada.clave || "", ev.currentTarget)
-  }, "⧉");
+  const botonCopiar = el(
+    "button",
+    {
+      type: "button",
+      class: "boton boton--icono",
+      title: "Copiar contraseña",
+      onclick: ev => copiarAlPortapapeles(entrada.clave || "", ev.currentTarget)
+    },
+    "⧉"
+  );
 
-  const botonUsuario = el("button", {
-    type: "button",
-    class: "boton boton--icono",
-    title: "Copiar usuario",
-    onclick: ev => copiarAlPortapapeles(entrada.usuario || "", ev.currentTarget)
-  }, "⧉");
+  const botonUsuario = el(
+    "button",
+    {
+      type: "button",
+      class: "boton boton--icono",
+      title: "Copiar usuario",
+      onclick: ev =>
+        copiarAlPortapapeles(entrada.usuario || "", ev.currentTarget)
+    },
+    "⧉"
+  );
 
-  const botonEditar = el("button", {
-    type: "button",
-    class: "boton boton--texto",
-    onclick: () => abrirEditor(entrada.id)
-  }, "Editar");
+  const botonEditar = el(
+    "button",
+    {
+      type: "button",
+      class: "boton boton--texto",
+      onclick: () => abrirEditor(entrada.id)
+    },
+    "Editar"
+  );
 
   const datos = el("div", { class: "campo" }, [
     el("span", { class: "campo__titulo" }, entrada.titulo || "(sin título)"),
@@ -641,24 +710,29 @@ function tarjetaDe(entrada) {
   ]);
 
   const claveFila = el("div", { class: "campo__clave" }, [
-    campoClave, botonVer, botonCopiar
+    campoClave,
+    botonVer,
+    botonCopiar
   ]);
 
   const acciones = el("div", { class: "campo__acciones" }, [
-    entrada.usuario
-      ? el("span", { class: "campo__nota" }, "usuario:")
-      : null,
-    botonUsuario, botonEditar
+    entrada.usuario ? el("span", { class: "campo__nota" }, "usuario:") : null,
+    botonUsuario,
+    botonEditar
   ]);
 
   const pie = el("div", { class: "campo__pie" }, [
     entrada.url
-      ? el("a", {
-          class: "campo__url",
-          href: normalizarUrl(entrada.url),
-          target: "_blank",
-          rel: "noopener noreferrer"   // sin este, la página abierta puede acceder a `opener`
-        }, entrada.url)
+      ? el(
+          "a",
+          {
+            class: "campo__url",
+            href: normalizarUrl(entrada.url),
+            target: "_blank",
+            rel: "noopener noreferrer" // sin este, la página abierta puede acceder a `opener`
+          },
+          entrada.url
+        )
       : null,
     acciones
   ]);
@@ -673,11 +747,10 @@ function normalizarUrl(url) {
      lo dejamos tal cual (ojo: javascript: quedaría igual, por
      eso abajo lo rechazamos). */
   const limpio = String(url).trim();
-  if (/^javascript:/i.test(limpio)) return "#";   // nunca
+  if (/^javascript:/i.test(limpio)) return "#"; // nunca
   if (/^https?:\/\//i.test(limpio)) return limpio;
   return "https://" + limpio;
 }
-
 
 /* ============================================================
    13) EDITOR DE ENTRADAS
@@ -688,11 +761,11 @@ function abrirEditor(id) {
 
   const existente = id ? estado.entradas.find(e => e.id === id) : null;
 
-  $("ed-titulo").value = existente ? (existente.titulo || "") : "";
-  $("ed-usuario").value = existente ? (existente.usuario || "") : "";
-  $("ed-clave").value = existente ? (existente.clave || "") : "";
-  $("ed-url").value = existente ? (existente.url || "") : "";
-  $("ed-nota").value = existente ? (existente.notas || "") : "";
+  $("ed-titulo").value = existente ? existente.titulo || "" : "";
+  $("ed-usuario").value = existente ? existente.usuario || "" : "";
+  $("ed-clave").value = existente ? existente.clave || "" : "";
+  $("ed-url").value = existente ? existente.url || "" : "";
+  $("ed-nota").value = existente ? existente.notas || "" : "";
 
   $("ed-titulo").required = true;
   $("ed-eliminar").hidden = !existente;
@@ -718,12 +791,21 @@ async function guardarEntrada(ev) {
   ev.preventDefault();
 
   const caja = $("ed-error");
-  const fallo = msg => { vaciar(caja); caja.appendChild(document.createTextNode(msg)); };
+  const fallo = msg => {
+    vaciar(caja);
+    caja.appendChild(document.createTextNode(msg));
+  };
 
-  if (!estado.clave) { bloquear("La bóveda se había bloqueado."); return; }
+  if (!estado.clave) {
+    bloquear("La bóveda se había bloqueado.");
+    return;
+  }
 
   const titulo = $("ed-titulo").value.trim();
-  if (!titulo) { fallo("Poné un título para reconocerla después."); return; }
+  if (!titulo) {
+    fallo("Poné un título para reconocerla después.");
+    return;
+  }
 
   const ahora = new Date().toISOString();
   const datos = {
@@ -757,7 +839,9 @@ async function guardarEntrada(ev) {
        o quedaríamos mostrando algo que no está en el disco. */
     if (estado.editandoId) {
       const original = leerBoveda();
-      if (original) { /* se reintenta en el próximo guardado */ }
+      if (original) {
+        /* se reintenta en el próximo guardado */
+      }
     }
     fallo("No se pudo guardar.");
   }
@@ -765,18 +849,23 @@ async function guardarEntrada(ev) {
 
 async function eliminarEntrada() {
   if (!estado.editandoId) return;
-  if (!estado.clave) { bloquear("La bóveda se había bloqueado."); return; }
+  if (!estado.clave) {
+    bloquear("La bóveda se había bloqueado.");
+    return;
+  }
 
   const existente = estado.entradas.find(e => e.id === estado.editandoId);
   const nombre = existente ? existente.titulo : "esta contraseña";
 
   const seguro = window.confirm(
-    "¿Eliminar “" + nombre + "” de la bóveda?\n\n" +
-    "Esto borra el dato cifrado. Si no tenés otra copia, se pierde."
+    "¿Eliminar “" +
+      nombre +
+      "” de la bóveda?\n\n" +
+      "Esto borra el dato cifrado. Si no tenés otra copia, se pierde."
   );
   if (!seguro) return;
 
-  const anterior = estado.entradas.slice();     // respaldo por si falla
+  const anterior = estado.entradas.slice(); // respaldo por si falla
   estado.entradas = estado.entradas.filter(e => e.id !== estado.editandoId);
 
   if (await persistir()) {
@@ -795,11 +884,21 @@ function crearId() {
   const b = crypto.getRandomValues(new Uint8Array(16));
   b[6] = (b[6] & 0x0f) | 0x40;
   b[8] = (b[8] & 0x3f) | 0x80;
-  const hex = Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
-  return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" +
-         hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+  const hex = Array.from(b)
+    .map(x => x.toString(16).padStart(2, "0"))
+    .join("");
+  return (
+    hex.slice(0, 8) +
+    "-" +
+    hex.slice(8, 12) +
+    "-" +
+    hex.slice(12, 16) +
+    "-" +
+    hex.slice(16, 20) +
+    "-" +
+    hex.slice(20)
+  );
 }
-
 
 /* ============================================================
    14) GENERADOR EN LA INTERFAZ
@@ -816,7 +915,11 @@ function pintarGenerador() {
   const largo = Number($("gen-largo").value);
   const salida = $("gen-salida");
 
-  if (!$("gen-mayus").checked && !$("gen-num").checked && !$("gen-simb").checked) {
+  if (
+    !$("gen-mayus").checked &&
+    !$("gen-num").checked &&
+    !$("gen-simb").checked
+  ) {
     /* Al menos las minúsculas están siempre; avisamos que con
        solo eso la contraseña queda floja. */
     avisar("Con solo minúsculas la contraseña queda débil.", "info");
@@ -832,7 +935,6 @@ function pintarGenerador() {
   barra.textContent = f.texto;
 }
 
-
 /* ============================================================
    15) EXPORTAR / IMPORTAR
    ============================================================
@@ -841,7 +943,10 @@ function pintarGenerador() {
    ============================================================ */
 function exportarBoveda() {
   const boveda = leerBoveda();
-  if (!boveda) { avisar("No hay bóveda para exportar.", "error"); return; }
+  if (!boveda) {
+    avisar("No hay bóveda para exportar.", "error");
+    return;
+  }
 
   const texto = JSON.stringify(boveda, null, 2);
   const blob = new Blob([texto], { type: "application/json" });
@@ -849,14 +954,18 @@ function exportarBoveda() {
 
   const enlace = el("a", {
     href: url,
-    download: "boveda-cifrada-" + new Date().toISOString().slice(0, 10) + ".json"
+    download:
+      "boveda-cifrada-" + new Date().toISOString().slice(0, 10) + ".json"
   });
   document.body.appendChild(enlace);
   enlace.click();
   document.body.removeChild(enlace);
   URL.revokeObjectURL(url);
 
-  avisar("Bóveda exportada (cifrada). No la subas a ningún lado sin cifrar.", "ok");
+  avisar(
+    "Bóveda exportada (cifrada). No la subas a ningún lado sin cifrar.",
+    "ok"
+  );
 }
 
 function importarBoveda() {
@@ -868,7 +977,7 @@ function importarBoveda() {
     let obj;
     try {
       obj = JSON.parse(String(lector.result));
-    } catch (e) {
+    } catch {
       avisar("El archivo no es un JSON válido.", "error");
       archivo.value = "";
       return;
@@ -886,9 +995,12 @@ function importarBoveda() {
     if (habia) {
       const seguro = window.confirm(
         "Ya existe una bóveda en este navegador.\n\n" +
-        "Importarla va a REEMPLAZARLA por completo. ¿Seguro?"
+          "Importarla va a REEMPLAZARLA por completo. ¿Seguro?"
       );
-      if (!seguro) { archivo.value = ""; return; }
+      if (!seguro) {
+        archivo.value = "";
+        return;
+      }
     }
 
     localStorage.setItem(CLAVE_STORAGE, JSON.stringify(obj));
@@ -903,7 +1015,6 @@ function importarBoveda() {
   lector.readAsText(archivo.files[0]);
 }
 
-
 /* ============================================================
    16) ARRANQUE
    ============================================================ */
@@ -915,10 +1026,12 @@ function iniciar() {
     caja.hidden = false;
     caja.className = "aviso aviso--error";
     vaciar(caja);
-    caja.appendChild(document.createTextNode(
-      "Tu navegador no ofrece Web Crypto (crypto.subtle). " +
-      "Esto pasa si abrís la página por http:// en vez de https://."
-    ));
+    caja.appendChild(
+      document.createTextNode(
+        "Tu navegador no ofrece Web Crypto (crypto.subtle). " +
+          "Esto pasa si abrís la página por http:// en vez de https://."
+      )
+    );
     return;
   }
 
@@ -938,14 +1051,18 @@ function iniciar() {
   $("form-abrir").addEventListener("submit", manejarAbrir);
 
   /* --- barra superior --- */
-  $("btn-bloquear").addEventListener("click", () => bloquear("Bóveda bloqueada."));
+  $("btn-bloquear").addEventListener("click", () =>
+    bloquear("Bóveda bloqueada.")
+  );
 
   /* --- búsqueda y ajustes --- */
   $("buscar").addEventListener("input", pintarLista);
   $("btn-ver-todo").addEventListener("click", () => {
     ajustes.verContrasenas = !ajustes.verContrasenas;
     escribirAjustes(ajustes);
-    $("btn-ver-todo").textContent = ajustes.verContrasenas ? "Ocultar todo" : "Mostrar todo";
+    $("btn-ver-todo").textContent = ajustes.verContrasenas
+      ? "Ocultar todo"
+      : "Mostrar todo";
     pintarLista();
   });
   $("orden").addEventListener("change", ev => {
@@ -985,12 +1102,15 @@ function iniciar() {
     $(id).addEventListener("change", pintarGenerador);
   });
   $("btn-regenerar").addEventListener("click", pintarGenerador);
-  $("btn-copiar-gen").addEventListener("click",
-    ev => copiarAlPortapapeles($("gen-salida").textContent, ev.currentTarget));
+  $("btn-copiar-gen").addEventListener("click", ev =>
+    copiarAlPortapapeles($("gen-salida").textContent, ev.currentTarget)
+  );
 
   /* --- importar / exportar --- */
   $("btn-exportar").addEventListener("click", exportarBoveda);
-  $("btn-importar").addEventListener("click", () => $("archivo-importar").click());
+  $("btn-importar").addEventListener("click", () =>
+    $("archivo-importar").click()
+  );
   $("archivo-importar").addEventListener("change", importarBoveda);
 
   /* --- bloqueo por actividad --- */
@@ -1022,7 +1142,7 @@ function iniciar() {
    ============================================================
    El service worker (sw.js) guarda los archivos para que la
    bóveda abra sin internet. No añade seguridad: añade
-   disponibilidad. La seguridad la pone crypto.js.
+   disponibilidad. La seguridad la pone src/crypto.js.
 
    Sobre las actualizaciones hay algo importante:
 
@@ -1039,7 +1159,8 @@ function iniciar() {
 function registrarServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
-  navigator.serviceWorker.register("sw.js")
+  navigator.serviceWorker
+    .register("sw.js")
     .then(registro => {
       /* updatefound dispara cuando el navegador baja un sw.js
          DISTINTO al que está corriendo, es decir: salió una
@@ -1052,8 +1173,14 @@ function registrarServiceWorker() {
           /* "installed" con un controller ya existente significa
              que hay una versión esperando. Sin controller sería
              la PRIMERA instalación, que no tiene nada que avisar. */
-          if (nuevo.state === "installed" && navigator.serviceWorker.controller) {
-            avisar("Hay una versión nueva de la bóveda. Recargá la página para que se aplique.", "info");
+          if (
+            nuevo.state === "installed" &&
+            navigator.serviceWorker.controller
+          ) {
+            avisar(
+              "Hay una versión nueva de la bóveda. Recargá la página para que se aplique.",
+              "info"
+            );
           }
         });
       });
@@ -1061,8 +1188,15 @@ function registrarServiceWorker() {
     /* Si el registro falla (por ejemplo, un navegador que no lo
        soporta en http), la bóveda sigue funcionando igual: el
        service worker es comodidad, no requisito. */
-    .catch(() => { /* sin service worker también anda */ });
+    .catch(() => {
+      /* sin service worker también anda */
+    });
 }
 
-/* Arranca al cargar el DOM. */
-document.addEventListener("DOMContentLoaded", iniciar);
+/* Arranque. Este archivo se carga como <script type="module">, y
+   los módulos se ejecutan DESPUÉS de parsear el DOM (garantía del
+   lenguaje, igual que defer). Por eso iniciar() se llama directo:
+   el DOM ya existe cuando corre este archivo, y registrar un
+   listener de DOMContentLoaded acá sería innecesario (y dejaría la
+   app sin arrancar si el evento ya se hubiera disparado). */
+iniciar();

@@ -30,22 +30,22 @@ Esto va en el pie de la página también. Ocultar los límites de un gestor de c
 
 ### ✓ Protege contra
 
-| Amenaza | Cómo |
-|---|---|
-| Que un servidor filtrado exponga tus claves | **No hay servidor.** No existe nada que filtrar. |
-| Que alguien lea el archivo guardado | Está cifrado; abrirlo exige la contraseña maestra. |
-| Que la página hable con terceros | **Cero peticiones de red.** Sin CDN, sin analíticas, sin API. |
-| Que un script lea la clave | La clave es `extractable: false` y solo vive en memoria mientras está abierta. |
-| Inyección de HTML (XSS básico) | **Nunca se usa `innerHTML`**: todo pasa por `textContent`. |
+| Amenaza                                     | Cómo                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| Que un servidor filtrado exponga tus claves | **No hay servidor.** No existe nada que filtrar.                               |
+| Que alguien lea el archivo guardado         | Está cifrado; abrirlo exige la contraseña maestra.                             |
+| Que la página hable con terceros            | **Cero peticiones de red.** Sin CDN, sin analíticas, sin API.                  |
+| Que un script lea la clave                  | La clave es `extractable: false` y solo vive en memoria mientras está abierta. |
+| Inyección de HTML (XSS básico)              | **Nunca se usa `innerHTML`**: todo pasa por `textContent`.                     |
 
 ### ✗ NO protege contra
 
-| Amenaza | Por qué |
-|---|---|
-| **Que pierdas la contraseña maestra** | **No hay recuperación.** Es matemático, no una política. |
-| Malware en tu equipo | Un troyano que graba lo que tipeás no lo puede detener ningún gestor. |
-| Que te miren por encima del hombro | Físico, no criptográfico. |
-| Robo del equipo apagado | Mientras esté bloqueada está cifrada; si te roban el equipo encendido y abierto, es otro tema. |
+| Amenaza                               | Por qué                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Que pierdas la contraseña maestra** | **No hay recuperación.** Es matemático, no una política.                                       |
+| Malware en tu equipo                  | Un troyano que graba lo que tipeás no lo puede detener ningún gestor.                          |
+| Que te miren por encima del hombro    | Físico, no criptográfico.                                                                      |
+| Robo del equipo apagado               | Mientras esté bloqueada está cifrada; si te roban el equipo encendido y abierto, es otro tema. |
 
 ### ⚠️ Límites honestos
 
@@ -63,16 +63,16 @@ Como tiene manifest y service worker, el navegador ofrece **instalarla**: en el 
 
 ### Qué ganás instalándola
 
-| Beneficio | Detalle |
-|---|---|
-| **Anda sin internet** | Los archivos quedan guardados; no hace falta señal ni WiFi para abrirla. |
-| **Ventana propia** | Se abre sin barra de direcciones. |
-| **Menos phishing** | Al no haber barra de direcciones donde se pueda escribir una URL parecida, se complica el ataque de "página falsa que imita a la bóveda". |
-| **Ícono propio** | Candado azul, el mismo que ves arriba. |
+| Beneficio             | Detalle                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anda sin internet** | Los archivos quedan guardados; no hace falta señal ni WiFi para abrirla.                                                                  |
+| **Ventana propia**    | Se abre sin barra de direcciones.                                                                                                         |
+| **Menos phishing**    | Al no haber barra de direcciones donde se pueda escribir una URL parecida, se complica el ataque de "página falsa que imita a la bóveda". |
+| **Ícono propio**      | Candado azul, el mismo que ves arriba.                                                                                                    |
 
 ### ⚠️ Qué NO cambia — leé esto antes de instalarla
 
-- **No la vuelve más segura.** La seguridad la pone `crypto.js`. Instalar es una cuestión de comodidad, no de protección.
+- **No la vuelve más segura.** La seguridad la pone `src/crypto.js`. Instalar es una cuestión de comodidad, no de protección.
 - **No crea una bóveda separada.** La app instalada y el sitio web comparten **exactamente los mismos datos**, porque viven en el mismo origen (`cuutii.github.io`). Si la abrís en el navegador vas a ver la misma bóveda, sin más.
 - **Tu bóveda sigue atada a esa dirección.** Este es el punto más importante de esta sección:
   > Si algún día se desactiva Pages, se borra el repo o cambia el nombre, **la app instalada deja de abrirse y tu bóveda queda ahí, inaccesible**. El navegador además puede llegar a borrar el almacenamiento de orígenes que no se usan durante semanas.
@@ -130,20 +130,29 @@ contraseña maestra ─┐
 
 ---
 
-## 📁 Estructura
+## 📁 Estructura del proyecto
 
 ```
 09-gestor-contrasenas/
-├── index.html     ← pantalla + CSP (aquí NO puede haber onclick= inline)
-├── crypto.js      ← el núcleo: derivar clave, cifrar, descifrar
-├── app.js         ← lógica de la interfaz (sin innerHTML, jamás)
-├── style.css      ← estilos, sin fuentes externas
-├── manifest.json  ← lo que hace que el navegador ofrezca instalarla
-├── sw.js          ← service worker: red primero, caché de respaldo
-├── img/           ← íconos (SVG fuente + PNG 192/512, con y sin maskable)
-├── servidor-prueba.ps1
-└── README.md      ← este archivo
+├── index.html             ← pantalla + CSP (aquí NO puede haber onclick= inline)
+├── style.css              ← estilos, sin fuentes externas
+├── manifest.json          ← lo que hace que el navegador ofrezca instalarla
+├── sw.js                  ← service worker (script clásico): red primero, caché de respaldo
+├── src/
+│   ├── crypto.js          ← núcleo: derivar clave, cifrar, descifrar (módulo ESM)
+│   └── app.js             ← lógica de la interfaz (módulo ESM, sin innerHTML, jamás)
+├── img/                   ← íconos (SVG fuente + PNG 192/512, con y sin maskable)
+├── servidor-prueba.ps1    ← servidor local para probar en localhost
+├── package.json           ← scripts: test, lint, format
+├── eslint.config.js       ← flat config de ESLint (@eslint/js + eslint-config-prettier)
+├── .prettierrc.json       ← formato de código (Prettier)
+├── .editorconfig          ← preferencias del editor
+├── .gitignore
+├── LICENSE
+└── README.md              ← este archivo
 ```
+
+`src/app.js` y `src/crypto.js` son **módulos ESM**: `index.html` carga `src/app.js` con `<script type="module">`, y `app.js` importa de `crypto.js` lo que usa (`crearBoveda`, `abrirBoveda`, `guardarBoveda`). Nada depende de globales implícitas entre archivos. `sw.js` en cambio sigue siendo un script clásico, porque los service workers no se cargan como módulos de forma estándar.
 
 ## ▶️ Cómo probarla
 
@@ -152,6 +161,28 @@ powershell -ExecutionPolicy Bypass -File servidor-prueba.ps1
 ```
 
 y abrí `http://localhost:8127`. Doble clic sobre `index.html` **no sirve**, porque `crypto.subtle` solo está disponible en contextos seguros (`https://` o `localhost`).
+
+---
+
+## 🛠 Herramientas de desarrollo
+
+`package.json` trae scripts para ESLint, Prettier y Vitest. Antes de usarlos hay que instalar las dependencias (esto baja paquetes a `node_modules/`; no toca el sitio publicado):
+
+```bash
+npm install
+```
+
+| Comando                | Qué hace                                                               |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `npm run lint`         | Corre ESLint con la configuración de `eslint.config.js` (flat config). |
+| `npm run format`       | Reformatea los archivos según `.prettierrc.json`.                      |
+| `npm run format:check` | Chequea el formato sin modificar archivos.                             |
+| `npm test`             | Corre la suite de Vitest una vez.                                      |
+| `npm run test:watch`   | Vitest en modo watch.                                                  |
+
+Los tests, cuando existan, van en `tests/` (esa carpeta está prevista en la configuración de ESLint y en Vitest, pero todavía no hay archivos de test en el repo).
+
+Estas herramientas son solo para desarrollo: el sitio publicado en GitHub Pages no usa npm, no tiene build step y no depende de `node_modules/`.
 
 ---
 
@@ -165,7 +196,7 @@ Con `innerHTML`, un fragmento de HTML inyectado se ejecuta como código. En un g
 Verificación:
 
 ```bash
-grep -nE "\.(inner|outer)HTML" app.js
+grep -nE "\.(inner|outer)HTML" src/app.js
 # esperado: 0 resultados
 ```
 
@@ -175,14 +206,14 @@ El comando está escrito **a propósito con `(inner|outer)`** y no con la palabr
 Cada petición a un tercero es una oportunidad de que se filtre que usás este gestor. Por eso no hay CDN ni fuentes de Google: solo tipografías del sistema.
 
 ```bash
-grep -nE 'fonts\.googleapis|cdn\.|unpkg|jsdelivr|XMLHttpRequest|sendBeacon' *.js *.html
+grep -nE 'fonts\.googleapis|cdn\.|unpkg|jsdelivr|XMLHttpRequest|sendBeacon' src/*.js *.js *.html
 # esperado: sin resultados
 ```
 
 Ojo con `fetch()`: **`sw.js` sí lo usa**, porque necesita pedir los archivos del propio sitio para cachearlos. Lo que no puede existir es un `fetch()` hacia afuera. Eso se comprueba así:
 
 ```bash
-grep -nE "fetch\(\s*['\"\`]?https?://" *.js *.html
+grep -nE "fetch\(\s*['\"\`]?https?://" src/*.js *.js *.html
 # esperado: sin resultados — ningún fetch hacia otro dominio
 ```
 
@@ -194,7 +225,7 @@ img-src 'self' data:; font-src 'self'; connect-src 'none';
 base-uri 'none'; form-action 'none'
 ```
 
-- `connect-src 'none'` es la garantía de que la página **no puede** llamar a ningún lado, ni siquiera si alguien logra inyectar código. *(Verificado: un `fetch()` a un dominio externo es bloqueado y lo registra en consola.)*
+- `connect-src 'none'` es la garantía de que la página **no puede** llamar a ningún lado, ni siquiera si alguien logra inyectar código. _(Verificado: un `fetch()` a un dominio externo es bloqueado y lo registra en consola.)_
 - `worker-src 'self'` es el que permite registrar el service worker. **No es un relajamiento**: sin esa directiva, `default-src 'none'` lo habría bloqueado en silencio y la app simplemente no se podría instalar. Igual que `script-src`, solo admite scripts del propio sitio.
 
 > **Límite de la CSP en GitHub Pages:** al no poder enviar cabeceras HTTP propias, la política va en una `<meta>`, y el navegador ignora en `meta` algunas directivas (`frame-ancestors` entre ellas). No es una CSP tan fuerte como la que se manda por cabecera.

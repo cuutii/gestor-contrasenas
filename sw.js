@@ -38,7 +38,9 @@
 
 // Nombre de la caché. Si cambiamos la versión (V2, V3...), el
 // navegador descarga todo de nuevo y borra la anterior.
-const CACHE_V1 = "gestor-contrasenas-v1";
+// v2: la lógica migró a src/ (módulos ESM); los nombres viejos
+// ./app.js y ./crypto.js ya no existen, hay que cachear los nuevos.
+const CACHE_V1 = "gestor-contrasenas-v2";
 
 // Archivos que deben funcionar sin internet.
 // Los paths son relativos a sw.js, que vive en la raíz.
@@ -46,8 +48,8 @@ const ARCHIVOS = [
   "./",
   "./index.html",
   "./style.css",
-  "./crypto.js",
-  "./app.js",
+  "./src/crypto.js",
+  "./src/app.js",
   "./manifest.json",
   "./img/icono.svg",
   "./img/icono-192.png",
@@ -67,7 +69,8 @@ self.addEventListener("install", evento => {
   self.skipWaiting();
 
   evento.waitUntil(
-    caches.open(CACHE_V1)
+    caches
+      .open(CACHE_V1)
       .then(cache => cache.addAll(ARCHIVOS))
       // Si falta un ícono, que no se rompa la instalación entera.
       .catch(error => console.warn("No se pudo precachear todo:", error))
@@ -79,13 +82,16 @@ self.addEventListener("install", evento => {
    ------------------------------------------------------------ */
 self.addEventListener("activate", evento => {
   evento.waitUntil(
-    caches.keys()
-      .then(nombres => Promise.all(
-        nombres
-          .filter(nombre => nombre !== CACHE_V1)  // todo menos la actual
-          .map(nombre => caches.delete(nombre))
-      ))
-      .then(() => self.clients.claim())  // tomamos control de las pestañas abiertas
+    caches
+      .keys()
+      .then(nombres =>
+        Promise.all(
+          nombres
+            .filter(nombre => nombre !== CACHE_V1) // todo menos la actual
+            .map(nombre => caches.delete(nombre))
+        )
+      )
+      .then(() => self.clients.claim()) // tomamos control de las pestañas abiertas
   );
 });
 
@@ -106,8 +112,8 @@ self.addEventListener("fetch", evento => {
   let propia;
   try {
     propia = new URL(peticion.url).origin === self.location.origin;
-  } catch (e) {
-    return;  // URL ilegible: mejor no tocar nada
+  } catch {
+    return; // URL ilegible: mejor no tocar nada
   }
   if (!propia) return;
 
@@ -129,12 +135,18 @@ self.addEventListener("fetch", evento => {
         // está, devolvemos una respuesta de error VÁLIDA — nunca
         // undefined, que rompería la petición entera y dejaría la
         // pantalla en blanco sin explicación.
-        caches.open(CACHE_V1)
+        caches
+          .open(CACHE_V1)
           .then(cache => cache.match(peticion))
-          .then(guardada => guardada || new Response(
-            "Sin conexión y este archivo no está guardado.",
-            { status: 503, statusText: "Sin conexión", headers: { "Content-Type": "text/plain; charset=utf-8" } }
-          ))
+          .then(
+            guardada =>
+              guardada ||
+              new Response("Sin conexión y este archivo no está guardado.", {
+                status: 503,
+                statusText: "Sin conexión",
+                headers: { "Content-Type": "text/plain; charset=utf-8" }
+              })
+          )
       )
   );
 });

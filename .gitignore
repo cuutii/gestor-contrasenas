@@ -15,3 +15,13 @@ INSTRUCCIONES.md
 # Sistema
 Thumbs.db
 .DS_Store
+
+# Dependencias (se regeneran con npm install)
+node_modules/
+
+# Logs
+*.log
+
+# Secretos: nunca se suben (a este proyecto no debería haberle
+# sobrado ninguno, pero la regla vale igual)
+.env
