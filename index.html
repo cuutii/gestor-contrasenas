@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+    ══════════════════════════════════════════════════════════
+    POLÍTICA DE SEGURIDAD DE CONTENIDO (CSP)
+    ══════════════════════════════════════════════════════════
+    Esta etiqueta le dice al navegador qué está permitido. Es la
+    primera línea de defensa contra la inyección de scripts:
+
+      default-src 'none'   → por defecto, nada
+      script-src 'self'    → SOLO los .js del propio sitio
+                             (se prohíbe cualquier script externo
+                             o inline; por eso NO puede existir
+                             ningún onclick="..." en este HTML)
+      style-src 'self'     → solo style.css propio
+      connect-src 'none'   → NO se puede hacer NINGUNA petición
+                             de red. Ni API, ni CDN, ni analítica.
+                             Tu bóveda nunca sale de la compu.
+      img-src 'self' data: → solo imágenes propias
+      base-uri 'none'      → no se puede reescribir las rutas
+      form-action 'none'   → ningún formulario puede mandar
+                             datos a un servidor (aunque alguien
+                             logre inyectar un <form>)
+    ──────────────────────────────────────────────────────────
+    LÍMITE HONESTO: GitHub Pages no permite enviar cabeceras
+    HTTP propias, así que esta política va en una metaetiqueta.
+    Funciona, pero el navegador ignora en <meta> algunas
+    directivas (frame-ancestors entre ellas). Para eso existe
+    además el encabezado que el navegador ya trae por defecto.
+    ══════════════════════════════════════════════════════════
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+
+  <!-- Protege contra que otra página embebida dentro de esta
+       pueda tocar algo. Mejor esfuerzo: como la CSP va en meta,
+       frame-ancestors no aplica desde acá. -->
+  <meta name="referrer" content="no-referrer">
+
+  <meta name="description" content="Gestor de contraseñas local: todo se cifra con AES-GCM en tu navegador y nunca sale un byte de tu red.">
+  <meta name="robots" content="noindex, nofollow">
+
+  <title>Bóveda | Gestor de contraseñas local</title>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <noscript>
+    <div class="aviso aviso--error" style="margin:1rem">
+      Esta bóveda necesita JavaScript para funcionar, porque el
+      cifrado ocurre en tu navegador. Sin JavaScript no hay
+      forma de descifrar nada.
+    </div>
+  </noscript>
+
+  <!-- ══════════ BARRA SUPERIOR ══════════
+       Se oculta hasta que la bóveda esté abierta. -->
+  <header class="barra" id="barra-superior" hidden>
+    <div class="barra__marca">
+      <span aria-hidden="true">🔐</span>
+      <strong>Bóveda</strong>
+    </div>
+
+    <div class="barra__estado">
+      <span id="contador" class="barra__contador"></span>
+      <span id="tiempo-bloqueo" class="barra__reloj"></span>
+    </div>
+
+    <div class="barra__acciones">
+      <button type="button" id="btn-ver-todo" class="boton boton--texto">Mostrar todo</button>
+      <button type="button" id="btn-bloquear" class="boton boton--peligro">Bloquear</button>
+    </div>
+  </header>
+
+  <!-- Zona de avisos (copiado, errores, confirmaciones) -->
+  <p id="aviso" class="aviso" role="status" aria-live="polite" hidden></p>
+
+  <main class="envoltorio">
+
+    <!-- ══════════ PANTALLA 1 · CREAR ══════════ -->
+    <section id="pantalla-crear" class="pantalla">
+      <div class="panel panel--centrado">
+        <p class="panel__emoji" aria-hidden="true">🛡️</p>
+        <h1>Creá tu bóveda</h1>
+        <p class="panel__sub">
+          Todo se cifra en tu navegador con <strong>AES-GCM</strong> y se
+          guarda así en esta computadora. <strong>Nunca sale un byte
+          por tu conexión a internet.</strong>
+        </p>
+
+        <div class="advertencia advertencia--importante">
+          <strong>⚠️ Antes de continuar, leé esto:</strong>
+          <ul>
+            <li>Si perdés la contraseña maestra, <strong>perdiste todo</strong>.
+                No existe “olvidé mi contraseña”.</li>
+            <li>No hay copia en ningún servidor. La seguridad es total
+                respecto a terceros, y la responsabilidad de no perderla
+                es <strong>enteramente tuya</strong>.</li>
+            <li>Esta bóveda es <strong>local a este navegador</strong>: en
+                otra compu o en modo incógnito no está.</li>
+          </ul>
+        </div>
+
+        <form id="form-crear" novalidate>
+          <div class="campo-form">
+            <label for="crear-clave">Contraseña maestra</label>
+            <input type="password" id="crear-clave" name="crear-clave"
+                   autocomplete="new-password" minlength="8" required
+                   aria-describedby="crear-fuerza">
+            <p id="crear-fuerza" class="fuerza fuerza--" role="status"></p>
+          </div>
+
+          <div class="campo-form">
+            <label for="crear-repetir">Repetí la contraseña</label>
+            <input type="password" id="crear-repetir" name="crear-repetir"
+                   autocomplete="new-password" minlength="8" required>
+          </div>
+
+          <p id="crear-error" class="error" role="alert"></p>
+
+          <button type="submit" id="crear-enviar" class="boton boton--principal ancho">
+            Crear bóveda
+          </button>
+        </form>
+      </div>
+    </section>
+
+
+    <!-- ══════════ PANTALLA 2 · ABRIR ══════════ -->
+    <section id="pantalla-abrir" class="pantalla" hidden>
+      <div class="panel panel--centrado">
+        <p class="panel__emoji" aria-hidden="true">🔑</p>
+        <h1>Bóveda bloqueada</h1>
+        <p class="panel__sub">Ingresá tu contraseña maestra para descifrarla.</p>
+
+        <form id="form-abrir" novalidate>
+          <div class="campo-form">
+            <label for="abrir-clave">Contraseña maestra</label>
+            <input type="password" id="abrir-clave" name="abrir-clave"
+                   autocomplete="current-password" required
+                   autofocus>
+          </div>
+
+          <p id="abrir-error" class="error" role="alert"></p>
+
+          <button type="submit" id="abrir-enviar" class="boton boton--principal ancho">
+            Abrir bóveda
+          </button>
+        </form>
+      </div>
+    </section>
+
+
+    <!-- ══════════ PANTALLA 3 · CONTENIDO ══════════ -->
+    <section id="pantalla-lista" class="pantalla" hidden>
+
+      <!-- ─── Herramientas ─── -->
+      <div class="herramientas">
+        <div class="herramientas__buscar">
+          <label for="buscar" class="oculto">Buscar contraseña</label>
+          <input type="search" id="buscar" name="buscar"
+                 placeholder="Buscar por título, usuario o sitio…"
+                 autocomplete="off">
+        </div>
+
+        <div class="herramientas__orden">
+          <label for="orden">Ordenar</label>
+          <select id="orden" name="orden">
+            <option value="titulo">Por título (A-Z)</option>
+            <option value="reciente">Más recientes</option>
+          </select>
+        </div>
+
+        <button type="button" id="btn-agregar" class="boton boton--principal">
+          + Agregar contraseña
+        </button>
+      </div>
+
+      <!-- ─── Lista ─── -->
+      <div id="lista-entradas" class="lista" aria-live="polite"></div>
+
+
+      <!-- ─── Generador ─── -->
+      <section class="panel generador" aria-labelledby="titulo-generador">
+        <h2 id="titulo-generador">Generador de contraseñas</h2>
+        <p class="panel__sub">
+          Aleatoriedad real (<code>crypto.getRandomValues</code>) y
+          selección <strong>sin sesgo</strong>, que es lo que hace
+          que las matemáticas del abecedario no se inclinen.
+        </p>
+
+        <div class="generador__salida">
+          <output id="gen-salida" class="generador__valor" for="gen-largo">—</output>
+          <span id="gen-fuerza" class="fuerza fuerza--"></span>
+        </div>
+
+        <div class="generador__control">
+          <label for="gen-largo">
+            Largo: <strong id="gen-largo-valor">20</strong>
+          </label>
+          <input type="range" id="gen-largo" name="gen-largo"
+                 min="8" max="64" value="20" step="1">
+        </div>
+
+        <fieldset class="generador__opciones">
+          <legend>Incluir</legend>
+          <label><input type="checkbox" id="gen-mayus" checked> Mayúsculas</label>
+          <label><input type="checkbox" id="gen-num" checked> Números</label>
+          <label><input type="checkbox" id="gen-simb" checked> Símbolos</label>
+        </fieldset>
+
+        <div class="generador__botones">
+          <button type="button" id="btn-regenerar" class="boton boton--texto">Nueva</button>
+          <button type="button" id="btn-copiar-gen" class="boton boton--texto">Copiar</button>
+        </div>
+      </section>
+
+
+      <!-- ─── Editor de entradas ─── -->
+      <section id="panel-editor" class="panel editor" hidden aria-labelledby="titulo-editor">
+        <h2 id="titulo-editor">Contraseña</h2>
+
+        <form id="form-editor" novalidate>
+          <div class="campo-form">
+            <label for="ed-titulo">Título <span class="obligatorio">obligatorio</span></label>
+            <input type="text" id="ed-titulo" name="ed-titulo"
+                   placeholder="Ej.: Gmail, GitHub, banco…" autocomplete="off" required>
+          </div>
+
+          <div class="campo-form">
+            <label for="ed-usuario">Usuario o correo</label>
+            <input type="text" id="ed-usuario" name="ed-usuario"
+                   autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="campo-form">
+            <label for="ed-clave">Contraseña</label>
+            <input type="password" id="ed-clave" name="ed-clave"
+                   autocomplete="new-password" spellcheck="false">
+            <div class="editor__clave-botones">
+              <button type="button" id="btn-generar-para-editor"
+                      class="boton boton--texto">Generar una</button>
+              <!-- Ojo: acá NO puede haber onclick="..." — la CSP
+                   prohíbe los manejadores inline. El comportamiento
+                   se engancha desde app.js por id. -->
+              <button type="button" id="ed-ver"
+                      class="boton boton--texto">Mostrar</button>
+            </div>
+          </div>
+
+          <div class="campo-form">
+            <label for="ed-url">Sitio web</label>
+            <input type="text" id="ed-url" name="ed-url"
+                   placeholder="ejemplo.com" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="campo-form">
+            <label for="ed-nota">Nota</label>
+            <textarea id="ed-nota" name="ed-nota" rows="3"
+                      placeholder="Datos que quieras recordar (queda cifrado igual que el resto)"></textarea>
+          </div>
+
+          <p id="ed-error" class="error" role="alert"></p>
+
+          <div class="editor__acciones">
+            <button type="submit" class="boton boton--principal">Guardar</button>
+            <button type="button" id="ed-cancelar" class="boton boton--texto">Cancelar</button>
+            <button type="button" id="ed-eliminar" class="boton boton--peligro" hidden>Eliminar</button>
+          </div>
+        </form>
+      </section>
+
+
+      <!-- ─── Copia de seguridad ─── -->
+      <section class="panel respaldo" aria-labelledby="titulo-respaldo">
+        <h2 id="titulo-respaldo">Copia de seguridad</h2>
+        <p class="panel__sub">
+          Exporta el archivo <strong>cifrado</strong> para no depender de un
+          solo navegador. Guardalo en un pendrive o en un lugar seguro:
+          quien lo tenga y además sepa tu contraseña maestra, podrá abrirlo.
+        </p>
+        <div class="respaldo__botones">
+          <button type="button" id="btn-exportar" class="boton boton--texto">⬇ Exportar</button>
+          <button type="button" id="btn-importar" class="boton boton--texto">⬆ Importar</button>
+          <input type="file" id="archivo-importar" accept="application/json,.json" hidden>
+        </div>
+      </section>
+
+    </section>
+  </main>
+
+  <!-- ══════════ PIE CON EL MODELO DE AMENAZA ══════════ -->
+  <footer class="pie">
+    <p class="pie__titulo">Qué protege esto — y qué no</p>
+    <div class="pie__columnas">
+      <div>
+        <p class="pie__ok">✓ Protege contra</p>
+        <ul>
+          <li>Que un servidor filtrado exponga tus claves: no hay servidor.</li>
+          <li>Que alguien lea el archivo guardado sin tu contraseña maestra.</li>
+          <li>Que la página hable con terceros: no hace ninguna petición de red.</li>
+        </ul>
+      </div>
+      <div>
+        <p class="pie__mal">✗ No protege contra</p>
+        <ul>
+          <li>Que pierdas la contraseña maestra: no hay recuperación.</li>
+          <li>Malware en tu equipo, que puede ver mientras escribís.</li>
+          <li>Que alguien mire por encima de tu hombro.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="pie__nota">
+      Para tus contraseñas más críticas, preferí un gestor auditado
+      profesionalmente (Bitwarden, KeePass). Este proyecto está pensado
+      para aprender y para credenciales de poca monta.
+    </p>
+  </footer>
+
+  <script src="crypto.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

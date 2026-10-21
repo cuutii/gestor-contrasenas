@@ -1,0 +1,17 @@
+# ===== LO QUE NUNCA SE SUBE A GIT =====
+# Regla de Maximo: estos archivos son solo para aprender en la
+# compu. En GitHub tiene que quedar limpio y profesional.
+
+# Apuntes personales del dueño
+INSTRUCCIONES.md
+
+# Versiones comentadas para estudiar (se generan desde los originales)
+*.comentado.*
+
+# Respaldo de pruebas
+*.bak
+*.bak-*
+
+# Sistema
+Thumbs.db
+.DS_Store
