@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bóveda">
+  <!-- Ícono de la app: candado sobre fondo degradado.
+       Misma paleta que style.css (#16213e → #0d1117 de fondo, #4f8cff de acento).
+       Los PNG que usa el manifest se generaron con el mismo dibujo. -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16213e"/>
+      <stop offset="1" stop-color="#0d1117"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="104" fill="url(#fondo)"/>
+
+  <!-- Arco del candado: semicírculo de radio 62 centrado en (256,224).
+       Se dibuja ANTES que el cuerpo a propósito, para que el cuerpo tape
+       las puntas del arco y parezca que entra por detrás. -->
+  <path d="M194 224 a62 62 0 0 1 124 0"
+        fill="none" stroke="#e6edf3" stroke-width="26"
+        stroke-linecap="round"/>
+
+  <!-- Cuerpo -->
+  <rect x="156" y="224" width="200" height="140" rx="24" fill="#4f8cff"/>
+
+  <!-- Bocallave -->
+  <circle cx="256" cy="278" r="18" fill="#0d1117"/>
+  <rect x="248" y="272" width="16" height="53" rx="6" fill="#0d1117"/>
+</svg>

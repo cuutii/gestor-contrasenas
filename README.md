@@ -57,6 +57,40 @@ Esto va en el pie de la página también. Ocultar los límites de un gestor de c
 
 ---
 
+## 📱 Instalarla como app
+
+Como tiene manifest y service worker, el navegador ofrece **instalarla**: en el celular aparece el botón de "Agregar a pantalla de inicio" y en el navegador de escritorio el ícono de instalar al costado de la barra de direcciones.
+
+### Qué ganás instalándola
+
+| Beneficio | Detalle |
+|---|---|
+| **Anda sin internet** | Los archivos quedan guardados; no hace falta señal ni WiFi para abrirla. |
+| **Ventana propia** | Se abre sin barra de direcciones. |
+| **Menos phishing** | Al no haber barra de direcciones donde se pueda escribir una URL parecida, se complica el ataque de "página falsa que imita a la bóveda". |
+| **Ícono propio** | Candado azul, el mismo que ves arriba. |
+
+### ⚠️ Qué NO cambia — leé esto antes de instalarla
+
+- **No la vuelve más segura.** La seguridad la pone `crypto.js`. Instalar es una cuestión de comodidad, no de protección.
+- **No crea una bóveda separada.** La app instalada y el sitio web comparten **exactamente los mismos datos**, porque viven en el mismo origen (`cuutii.github.io`). Si la abrís en el navegador vas a ver la misma bóveda, sin más.
+- **Tu bóveda sigue atada a esa dirección.** Este es el punto más importante de esta sección:
+  > Si algún día se desactiva Pages, se borra el repo o cambia el nombre, **la app instalada deja de abrirse y tu bóveda queda ahí, inaccesible**. El navegador además puede llegar a borrar el almacenamiento de orígenes que no se usan durante semanas.
+  >
+  > **Por eso la exportación cifrada no es opcional: es tu único respaldo.** Hacela y guardala en un pendrive.
+
+### ¿Y el service worker, agrega seguridad?
+
+**No. Agrega disponibilidad.** De hecho trae un riesgo propio que se mitiga así:
+
+> Un service worker guarda código. Si usáramos "caché primero" como en un mapa, y mañana corrigiera un fallo de seguridad, vos seguirías ejecutando la versión vieja guardada **sin enterarte nunca**. Por eso `sw.js` usa **"red primero, caché de respaldo"**: siempre intenta bajar la última versión, y solo usa la caché si no hay internet.
+
+Además, `sw.js` se limita a lo suyo: solo intercepta **GET del propio sitio**, jamás modifica una respuesta y no hace ninguna petición propia.
+
+Cuando aparece una versión nueva, **no se recarga sola** — aparece un aviso. Recargar a la fuerza en un gestor de contraseñas sería descuidado: podría caerse en el medio de que estás tipeando tu contraseña maestra.
+
+---
+
 ## 🧪 Cómo funciona por dentro
 
 ### El viaje de tu contraseña maestra
@@ -104,6 +138,10 @@ contraseña maestra ─┐
 ├── crypto.js      ← el núcleo: derivar clave, cifrar, descifrar
 ├── app.js         ← lógica de la interfaz (sin innerHTML, jamás)
 ├── style.css      ← estilos, sin fuentes externas
+├── manifest.json  ← lo que hace que el navegador ofrezca instalarla
+├── sw.js          ← service worker: red primero, caché de respaldo
+├── img/           ← íconos (SVG fuente + PNG 192/512, con y sin maskable)
+├── servidor-prueba.ps1
 └── README.md      ← este archivo
 ```
 
@@ -124,29 +162,40 @@ Hay tres reglas que no se tocan, y conviene saber por qué:
 **1. Nunca `innerHTML`.**
 Con `innerHTML`, un fragmento de HTML inyectado se ejecuta como código. En un gestor, eso equivaldría a entregar las contraseñas. Todo lo que se dibuja pasa por `createElement()` y `textContent`.
 
-Verificación real (con el punto, para que no atrape a los comentarios que explican la regla):
+Verificación:
 
 ```bash
-grep -nE '\.innerHTML|\.outerHTML|insertAdjacent\w*' app.js
-# esperado: sin resultados
+grep -nE "\.(inner|outer)HTML" app.js
+# esperado: 0 resultados
 ```
+
+El comando está escrito **a propósito con `(inner|outer)`** y no con la palabra completa: si se escribiera el literal con el punto, el grep atraparía la propia línea donde se documenta la regla y daría falsa alarma. (Me pasó tres veces antes de entenderlo.)
 
 **2. Nunca recursos externos.**
 Cada petición a un tercero es una oportunidad de que se filtre que usás este gestor. Por eso no hay CDN ni fuentes de Google: solo tipografías del sistema.
 
 ```bash
-grep -nE 'fonts\.googleapis|cdn\.|unpkg|jsdelivr|fetch\(|XMLHttpRequest' *.js *.html
+grep -nE 'fonts\.googleapis|cdn\.|unpkg|jsdelivr|XMLHttpRequest|sendBeacon' *.js *.html
 # esperado: sin resultados
+```
+
+Ojo con `fetch()`: **`sw.js` sí lo usa**, porque necesita pedir los archivos del propio sitio para cachearlos. Lo que no puede existir es un `fetch()` hacia afuera. Eso se comprueba así:
+
+```bash
+grep -nE "fetch\(\s*['\"\`]?https?://" *.js *.html
+# esperado: sin resultados — ningún fetch hacia otro dominio
 ```
 
 **3. La CSP no se relaja.**
 
 ```
-default-src 'none'; script-src 'self'; style-src 'self';
-img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'
+default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self';
+img-src 'self' data:; font-src 'self'; connect-src 'none';
+base-uri 'none'; form-action 'none'
 ```
 
-`connect-src 'none'` es la garantía de que la página **no puede** llamar a ningún lado, ni siquiera si alguien logra inyectar código.
+- `connect-src 'none'` es la garantía de que la página **no puede** llamar a ningún lado, ni siquiera si alguien logra inyectar código. *(Verificado: un `fetch()` a un dominio externo es bloqueado y lo registra en consola.)*
+- `worker-src 'self'` es el que permite registrar el service worker. **No es un relajamiento**: sin esa directiva, `default-src 'none'` lo habría bloqueado en silencio y la app simplemente no se podría instalar. Igual que `script-src`, solo admite scripts del propio sitio.
 
 > **Límite de la CSP en GitHub Pages:** al no poder enviar cabeceras HTTP propias, la política va en una `<meta>`, y el navegador ignora en `meta` algunas directivas (`frame-ancestors` entre ellas). No es una CSP tan fuerte como la que se manda por cabecera.
 

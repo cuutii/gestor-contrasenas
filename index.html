@@ -34,7 +34,7 @@
     ══════════════════════════════════════════════════════════
   -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+        content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 
   <!-- Protege contra que otra página embebida dentro de esta
        pueda tocar algo. Mejor esfuerzo: como la CSP va en meta,
@@ -45,6 +45,23 @@
   <meta name="robots" content="noindex, nofollow">
 
   <title>Bóveda | Gestor de contraseñas local</title>
+
+  <!-- ══════════ PWA: instalar como app ══════════
+       El manifest es el que le dice al navegador "esto se puede
+       instalar": nombre, íconos, colores y en qué ventana abrirse.
+
+       worker-src 'self' (agregado en la CSP de arriba) es el que
+       permite registrar el service worker. Sin esa directiva,
+       default-src 'none' lo habría bloqueado en silencio.
+
+       Aclaración honesta de lo que esto NO hace: instalar la app
+       NO la vuelve más segura, NO copia tu bóveda a otro lado y
+       NO la separa del sitio web. Comparten exactamente los mismos
+       datos, porque viven en el mismo origen (cuutii.github.io). -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="img/icono.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/icono-192.png">
 
   <link rel="stylesheet" href="style.css">
 </head>

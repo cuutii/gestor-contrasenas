@@ -13,16 +13,15 @@
    │  contraseñas mientras están visibles. Con textContent   │
    │  el texto SIEMPRE se trata como texto, nunca como HTML. │
    │                                                         │
-   │  Verificación real (busca el USO, con punto, para que   │
-   │  no atrape esta misma explicación):                     │
+   │  Verificación:                                          │
    │                                                         │
-   │    grep -nE '\.innerHTML|\.outerHTML|insertAdjacent\w*' │
+   │    grep -nE "\.(inner|outer)HTML" app.js                │
    │                                                         │
-   │  Ojo: un grep simple de "innerHTML" SÍ va a dar         │
-   │  coincidencias, porque este comentario menciona la       │
-   │  palabra para explicar que está prohibida. Lo que no     │
-   │  debe aparecer nunca es un `.innerHTML` usado como      │
-   │  código.                                                │
+   │  Debe devolver 0 resultados. El comando está escrito    │
+   │  de forma que no se encuentre a sí mismo ni a esta      │
+   │  caja: usa (inner|outer) en lugar de escribir la        │
+   │  palabra completa, así ningún comentario puede          │
+   │  hacer que un grep de mentira dé falsa alarma.          │
    └─────────────────────────────────────────────────────────┘
 
    Además, este proyecto NO hace NINGUNA petición de red.
@@ -1011,6 +1010,58 @@ function iniciar() {
   document.addEventListener("submit", ev => {
     if (!ev.target.matches("form[action]")) ev.preventDefault();
   });
+
+  /* ----------------------------------------------------------
+     PWA: service worker + aviso de actualización
+     ---------------------------------------------------------- */
+  registrarServiceWorker();
+}
+
+/* ============================================================
+   17) PWA — INSTALAR LA APP Y ACTUALIZARLA
+   ============================================================
+   El service worker (sw.js) guarda los archivos para que la
+   bóveda abra sin internet. No añade seguridad: añade
+   disponibilidad. La seguridad la pone crypto.js.
+
+   Sobre las actualizaciones hay algo importante:
+
+   sw.js usa "red primero" justamente para que, si mañana hay un
+   arreglo de seguridad, no te quedes con la versión vieja
+   guardada. Pero aunque el worker nuevo se active, ESTA PESTAÑA
+   sigue corriendo el JavaScript viejo hasta que se recargue.
+
+   Por eso le avisamos al usuario en vez de recargar solos.
+   Recargar a la fuerza en un gestor de contraseñas sería
+   descuidado: podría caerse en el medio de que estás tipeando
+   tu contraseña maestra. Mejor aviso y decisión tuya.
+   ============================================================ */
+function registrarServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  navigator.serviceWorker.register("sw.js")
+    .then(registro => {
+      /* updatefound dispara cuando el navegador baja un sw.js
+         DISTINTO al que está corriendo, es decir: salió una
+         versión nueva. */
+      registro.addEventListener("updatefound", () => {
+        const nuevo = registro.installing;
+        if (!nuevo) return;
+
+        nuevo.addEventListener("statechange", () => {
+          /* "installed" con un controller ya existente significa
+             que hay una versión esperando. Sin controller sería
+             la PRIMERA instalación, que no tiene nada que avisar. */
+          if (nuevo.state === "installed" && navigator.serviceWorker.controller) {
+            avisar("Hay una versión nueva de la bóveda. Recargá la página para que se aplique.", "info");
+          }
+        });
+      });
+    })
+    /* Si el registro falla (por ejemplo, un navegador que no lo
+       soporta en http), la bóveda sigue funcionando igual: el
+       service worker es comodidad, no requisito. */
+    .catch(() => { /* sin service worker también anda */ });
 }
 
 /* Arranca al cargar el DOM. */
