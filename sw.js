@@ -22,6 +22,12 @@
    internet. En criollo: la app anda sin conexión, pero nunca
    a costa de quedarse con código viejo.
 
+   UNA EXCEPCIÓN, y la tiene su propia razón: si la red
+   contesta pero con ERROR DE SERVIDOR (502, 504), tampoco
+   tenemos "la última versión" — tenemos un fallo del camino.
+   Ahí se usa lo guardado. Un 4xx, en cambio, SÍ se respeta
+   tal cual: el servidor contestó, y contestó que no.
+
    ══════════════════════════════════════════════════════════
    LAS TRES REGLAS DE ESTE ARCHIVO
    ══════════════════════════════════════════════════════════
@@ -117,36 +123,58 @@ self.addEventListener("fetch", evento => {
   }
   if (!propia) return;
 
+  // ¿Qué hacemos cuando la red no nos dio nada útil? Buscamos la
+  // copia guardada. Devolvemos `null` si no hay, para que cada
+  // caso decida qué hacer con eso: así no mezclamos "no hay copia"
+  // con una respuesta fabricada.
+  const buscarGuardado = () =>
+    caches
+      .open(CACHE_V1)
+      .then(cache => cache.match(peticion))
+      .then(guardada => guardada || null);
+
   // ESTRATEGIA: red primero.
   evento.respondWith(
     fetch(peticion)
       .then(respuesta => {
-        // Guardamos copia SOLO si la respuesta es buena (200) y
-        // viene de la red. Así la caché siempre refleja lo último
-        // que se pudo bajar, no errores.
+        // 1) Respuesta buena (200): guardamos copia y devolvemos
+        //    tal cual. Esto es "red primero" y no cambió.
         if (respuesta && respuesta.status === 200) {
           const copia = respuesta.clone();
           caches.open(CACHE_V1).then(cache => cache.put(peticion, copia));
+          return respuesta;
         }
+
+        // 2) La red contestó con ERROR DE SERVIDOR (502, 504...):
+        //    no tenemos la última versión, tenemos un fallo del
+        //    camino. Ahí probamos lo guardado antes de rendirnos.
+        //    Antes esto se pasaba tal cual: el usuario veía el
+        //    error del intermediario con la app entera guardada.
+        if (respuesta && respuesta.status >= 500 && respuesta.status < 600) {
+          return buscarGuardado().then(guardada => guardada || respuesta);
+        }
+
+        // 3) Un 4xx (404 y compañía) es una respuesta DEFINITIVA:
+        //    el servidor contestó que el archivo no existe o que
+        //    no me deja verlo. Taparla con la caché sería mentir,
+        //    así que se pasa tal cual.
         return respuesta;
       })
       .catch(() =>
-        // No hay internet: intentamos con lo guardado. Si tampoco
-        // está, devolvemos una respuesta de error VÁLIDA — nunca
-        // undefined, que rompería la petición entera y dejaría la
-        // pantalla en blanco sin explicación.
-        caches
-          .open(CACHE_V1)
-          .then(cache => cache.match(peticion))
-          .then(
-            guardada =>
-              guardada ||
-              new Response("Sin conexión y este archivo no está guardado.", {
-                status: 503,
-                statusText: "Sin conexión",
-                headers: { "Content-Type": "text/plain; charset=utf-8" }
-              })
-          )
+        // 4) No hubo respuesta posible (sin internet, DNS, TLS...):
+        //    acá sí usamos lo guardado. Si tampoco está, devolvemos
+        //    una respuesta de error VÁLIDA — nunca undefined, que
+        //    rompería la petición entera y dejaría la pantalla en
+        //    blanco sin explicación.
+        buscarGuardado().then(
+          guardada =>
+            guardada ||
+            new Response("Sin conexión y este archivo no está guardado.", {
+              status: 503,
+              statusText: "Sin conexión",
+              headers: { "Content-Type": "text/plain; charset=utf-8" }
+            })
+        )
       )
   );
 });
